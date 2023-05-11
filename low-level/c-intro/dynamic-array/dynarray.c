@@ -122,6 +122,11 @@ int main()
     DA_pop(da);
     assert(DA_size(da) == 0);
 
+    for (int i = 0; i < da->size; i++)
+    {
+        printf("%s\n", typeof(da->data[i]));s
+    }
+
     // expansion test
     DA *da2 = DA_new(); // use another DA to show it doesn't get overriden
     DA_push(da2, &x);
