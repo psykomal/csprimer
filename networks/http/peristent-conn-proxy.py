@@ -1,71 +1,125 @@
+from enum import Enum, auto
 import socket
 import json
 import time
 import sys
-
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-s.bind(('0.0.0.0', 7777))
-
-s.listen()
-print("Listening for connections...")
+import io
 
 
-def parser(http_res):
-    
-    headers, _ = req.split(b'\r\n\r\n')
-    headers_list = [h.decode('utf-8') for h in headers.split(b'\r\n')]
+class HttpState(Enum):
+    START = auto()
+    HEADERS = auto()
+    BODY = auto()
+    END = auto()
 
-    head = headers_list[0]
-    version = head.split('/')[-1]
-    
-    data = {}
-    for header in headers_list[1:]:
-        k, v = header.split(': ')
-        data[k] = v
 
-    data['version'] = version
-    return data
+class HttpRequest(object):
+    def __init__(self) -> None:
+        self.headers = {}
+        self.residual = b""
+        self.state = HttpState.START
+        self.body = b""
 
-while True:
-    try:
+    def parse(self, data):
+        bs = io.BytesIO(self.residual + data)
 
-        conn, addr = s.accept()
+        if self.state is HttpState.START:
+            request_line = bs.readline()
+            if request_line[-1:] != b"\n":
+                self.residual = request_line
+                return
+            self.method, self.uri, self.version = request_line.rstrip().split(b" ")
+            self.state = HttpState.HEADERS
 
-        print(f"New connection at {addr}")
+        if self.state is HttpState.HEADERS:
+            while True:
+                field_line = bs.readline()
+                if not field_line:
+                    break
+                if field_line[-1:] != b"\n":
+                    self.residual = field_line
+                    return
 
-        req = conn.recv(4096)
-        print(f"-> *       {len(req)}B")
-        headers, body = req.split(b'\r\n\r\n')
+                if field_line == b"\r\n" or field_line == b"\n":
+                    self.state = HttpState.BODY
+                    break
+                field_name, field_value = field_line.rstrip().split(b": ")
+                self.headers[field_name.lower()] = field_value
 
-        new_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        new_socket.connect(("127.0.0.1", 7799))
-        # forward_headers = b'GET / HTTP/1.1\r\nHost: 127.0.0.1:7799\r\nUser-Agent: proxx\r\nAccept: */*'
-        # new_req = forward_headers + b'\r\n\r\n' + body
+        if self.method != b"GET" and self.state is HttpState.BODY:
+            self.body += bs.read()
+        elif self.method == b"GET":
+            self.state = HttpState.END
 
-        new_socket.send(req)
-        print(f"   * ->    {len(req)}B")
-        # new_socket.sendto(new_req, ("127.0.0.1", 7799))
-            
+
+def should_keepalive(req):
+    c = req.headers.get("connection")
+    if req.version == b"HTTP/1.0":
+        return c and c.lower() == b"keep-alive"
+    elif req.version == b"HTTP/1.1":
+        return not (c and c.lower() == b"close")
+
+
+SERVER_ADDR = ("127.0.0.1", 7799)
+
+
+def handle_client_connection(client_sock):
+    while True:
+        upstream_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        upstream_sock.connect(SERVER_ADDR)
+        print(f"Connected to {SERVER_ADDR}")
+
+        req = HttpRequest()
+        close = False
+        while req.state is not HttpState.END:
+            data = client_sock.recv(4096)
+            print(f"-> *       {len(data)}B")
+            if not data:
+                close = True
+                break
+            req.parse(data)
+            upstream_sock.send(data)
+            print(f"   * ->    {len(data)}B")
+
+        if close:
+            upstream_sock.close()
+            break
+
         while True:
-            res = new_socket.recv(4096)
-            data = parser(res)
-            print(data)
+            res = upstream_sock.recv(4096)
             print(f"   * <-    {len(res)}B")
             if not res:
                 break
-            conn.send(res)
-            
+            client_sock.send(res)
             print(f"<- *       {len(res)}B")
 
-        new_socket.close()
-        conn.close()
-    except KeyboardInterrupt:
-        s.close()
-        print("Exiting...")
-        sys.exit()
-    except OSError as msg:
-        print(msg)
-    finally:
-        new_socket.close()
-        conn.close()
+        upstream_sock.close()
+        print(should_keepalive(req))
+        if not should_keepalive(req):
+            return
+
+
+if __name__ == "__main__":
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    s.bind(("0.0.0.0", 7777))
+
+    s.listen()
+    print("Listening for connections...")
+
+    while True:
+        try:
+            client_sock, addr = s.accept()
+
+            print(f"New connection at {addr}")
+            handle_client_connection(client_sock)
+            client_sock.close()
+        except KeyboardInterrupt:
+            s.close()
+            print("Exiting...")
+            sys.exit()
+        # except Exception as msg:
+        #     client_sock.send(b"HTTP/1.1 500 Internal Server Error\r\n\r\n")
+        #     print(msg)
+        finally:
+            client_sock.close()
