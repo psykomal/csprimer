@@ -41,15 +41,15 @@ class HttpRequest(object):
                     return
 
                 if field_line == b"\r\n" or field_line == b"\n":
-                    self.state = HttpState.BODY
+                    if self.method == b"GET":
+                        self.state = HttpState.END
+                    else:
+                        self.state = HttpState.BODY
                     break
                 field_name, field_value = field_line.rstrip().split(b": ")
                 self.headers[field_name.lower()] = field_value
-
-        if self.method != b"GET" and self.state is HttpState.BODY:
+        if self.state is HttpState.BODY:
             self.body += bs.read()
-        elif self.method == b"GET":
-            self.state = HttpState.END
 
 
 def should_keepalive(req):
@@ -101,7 +101,7 @@ def handle_client_connection(client_sock):
 
 if __name__ == "__main__":
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind(("0.0.0.0", 7777))
 
     s.listen()
