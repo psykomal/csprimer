@@ -21,7 +21,7 @@ if __name__ == "__main__":
     listener.bind(OWN_ADDR)
 
     listener.listen(10)
-    # print("Listening for connections...")
+    print("Listening for connections...")
 
     inputs = [listener]
     outputs = []
@@ -36,6 +36,7 @@ if __name__ == "__main__":
         for s in readable:
             if s is listener:
                 client_sock, client_addr = s.accept()
+                print(f"Client connected at addr {client_addr}")
                 client_sock.setblocking(False)
                 inputs.append(client_sock)
             else:
@@ -53,36 +54,34 @@ if __name__ == "__main__":
                     req = HttpRequest()
                     req_for_client[s] = req
 
-                if req.state is not HttpState.END:
-                    data = s.recv(4096)
-                    print(f"-> *       {len(data)}B")
-                    if not data:
-                        upstream_sock.close()
-                        del upstream_for_client[s]
-                        del req_for_client[s]
-                        s.close()
-                        inputs.remove(s)
-                    else:
-                        req.parse(data)
-                        upstream_sock.send(data)
-                        print(f"   * ->    {len(data)}B")
+                data = s.recv(4096)
+                print(f"-> *       {len(data)}B")
+                if not data:
+                    s.close()
+                    inputs.remove(s)
+                    del upstream_for_client[s]
+                    del req_for_client[s]
                 else:
+                    req.parse(data)
+                    upstream_sock.send(data)
+                    print(f"   * ->    {len(data)}B")
+
+                if req.state is HttpState.END:
                     while True:
                         res = upstream_sock.recv(4096)
                         print(f"   * <-    {len(res)}B")
-                        if res:
-                            s.send(res)
-                            print(f"<- *       {len(res)}B")
-                        else:
-                            upstream_sock.close()
-                            del upstream_for_client[s]
-
-                            if not should_keepalive(req):
-                                del req_for_client[s]
-                                s.close()
-                                inputs.remove(s)
-
+                        if not res:
                             break
+                        s.send(res)
+                        print(f"<- *       {len(res)}B")
+
+                    upstream_sock.close()
+                    del upstream_for_client[s]
+                    del req_for_client[s]
+
+                    if not should_keepalive(req):
+                        s.close()
+                        inputs.remove(s)
 
         # except KeyboardInterrupt:
         #     listener.close()
