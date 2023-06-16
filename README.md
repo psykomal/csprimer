@@ -1,4 +1,4 @@
 
 
 
-Projects from [cs-primer](csprimer.com) course
+Projects from [cs-primer](csprimer.com) exploring CS internals. 
