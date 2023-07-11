@@ -5,7 +5,7 @@ import sys
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-s.bind(('0.0.0.0', 7777))
+s.bind(("0.0.0.0", 7777))
 
 s.listen()
 print("Listening for connections...")
@@ -13,14 +13,13 @@ print("Listening for connections...")
 
 while True:
     try:
-
         conn, addr = s.accept()
 
         print(f"New connection at {addr}")
 
         req = conn.recv(4096)
         print(f"-> *       {len(req)}B")
-        headers, body = req.split(b'\r\n\r\n')
+        headers, body = req.split(b"\r\n\r\n")
 
         new_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         new_socket.connect(("127.0.0.1", 7799))
@@ -30,14 +29,14 @@ while True:
         new_socket.send(req)
         print(f"   * ->    {len(req)}B")
         # new_socket.sendto(new_req, ("127.0.0.1", 7799))
-            
+
         while True:
             res = new_socket.recv(4096)
             print(f"   * <-    {len(res)}B")
             if not res:
                 break
             conn.send(res)
-            
+
             print(f"<- *       {len(res)}B")
 
         new_socket.close()
