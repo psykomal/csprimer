@@ -42,41 +42,20 @@ def average_age(users):
     return total / len(users)
 
 
-def average_payment_amount(users):
-    # amount = 0
-    # count = 0
-    count = sum([len(u.payments) for u in users.values()])
-    amount = sum(
-        [sum([payment_to_dollars(p) for p in u.payments]) for u in users.values()]
-    )
-    # for u in users.values():
-    #     count += len(u.payments)
-    #     for p in u.payments:
-    #         amount += float(p.amount.dollars) + float(p.amount.cents) / 100
-    return amount / count
+def average_payment_amount(users, payments):
+    return sum(payments) / len(payments)
 
 
-def stddev_payment_amount(users):
-    mean = average_payment_amount(users)
-    squared_diffs = 0
-    count = sum([len(u.payments) for u in users.values()])
-    squared_diffs = sum(
-        [
-            sum([x * x for x in [(payment_to_dollars(p) - mean) for p in u.payments]])
-            for u in users.values()
-        ]
-    )
-    # for u in users.values():
-    #     count += len(u.payments)
-    #     for p in u.payments:
-    #         amount = float(p.amount.dollars) + float(p.amount.cents) / 100
-    #         diff = amount - mean
-    #         squared_diffs += diff * diff
+def stddev_payment_amount(users, payments):
+    mean = average_payment_amount(users, payments)
+    count = len(payments)
+    squared_diffs = sum([(p - mean) ** 2 for p in payments])
     return math.sqrt(squared_diffs / count)
 
 
 def load_data():
     users = {}
+    payments = []
     with open("users.csv") as f:
         for line in csv.reader(f):
             uid, name, age, address_line, zip_code = line
@@ -89,16 +68,17 @@ def load_data():
                 DollarAmount(dollars=int(amount) // 100, cents=int(amount) % 100),
                 time=datetime.datetime.fromisoformat(timestamp),
             )
+            payments.append(payment_to_dollars(payment))
             users[int(uid)].payments.append(payment)
-    return users
+    return users, payments
 
 
 if __name__ == "__main__":
     t = time.perf_counter()
-    users = load_data()
+    users, payments = load_data()
     print(f"Data loading: {time.perf_counter() - t:.3f}s")
     t = time.perf_counter()
     assert abs(average_age(users) - 59.626) < 0.01
-    assert abs(stddev_payment_amount(users) - 288684.849) < 0.01
-    assert abs(average_payment_amount(users) - 499850.559) < 0.01
+    assert abs(stddev_payment_amount(users, payments) - 288684.849) < 0.01
+    assert abs(average_payment_amount(users, payments) - 499850.559) < 0.01
     print(f"Computation {time.perf_counter() - t:.3f}s")
