@@ -35,11 +35,8 @@ def payment_to_dollars(p: Payment):
     return float(p.amount.dollars) + float(p.amount.cents) / 100
 
 
-def average_age(users):
-    total = sum([u.age for u in users.values()])
-    # for u in users.values():
-    #     total += u.age
-    return total / len(users)
+def average_age(ages):
+    return sum(ages) / len(ages)
 
 
 def average_payment_amount(users, payments):
@@ -55,12 +52,14 @@ def stddev_payment_amount(users, payments):
 
 def load_data():
     users = {}
+    ages = []
     payments = []
     with open("users.csv") as f:
         for line in csv.reader(f):
             uid, name, age, address_line, zip_code = line
             addr = Address(address_line, zip_code)
             users[int(uid)] = User(int(uid), name, int(age), addr, [])
+            ages.append(int(age))
     with open("payments.csv") as f:
         for line in csv.reader(f):
             amount, timestamp, uid = line
@@ -70,15 +69,15 @@ def load_data():
             )
             payments.append(payment_to_dollars(payment))
             users[int(uid)].payments.append(payment)
-    return users, payments
+    return users, payments, ages
 
 
 if __name__ == "__main__":
     t = time.perf_counter()
-    users, payments = load_data()
+    users, payments, ages = load_data()
     print(f"Data loading: {time.perf_counter() - t:.3f}s")
     t = time.perf_counter()
-    assert abs(average_age(users) - 59.626) < 0.01
+    assert abs(average_age(ages) - 59.626) < 0.01
     assert abs(stddev_payment_amount(users, payments) - 288684.849) < 0.01
     assert abs(average_payment_amount(users, payments) - 499850.559) < 0.01
     print(f"Computation {time.perf_counter() - t:.3f}s")
